@@ -1,0 +1,33 @@
+{
+  "name": "cc-minimal-statusline",
+  "version": "1.0.0",
+  "description": "A minimal, elegant status line for Claude Code with gradient progress bar, git integration, and update notifications",
+  "main": "statusline.sh",
+  "bin": {
+    "cc-minimal-statusline": "./statusline.sh"
+  },
+  "scripts": {
+    "postinstall": "node scripts/postinstall.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/runsonmypc/cc-minimal-statusline.git"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "statusline",
+    "status-line",
+    "terminal",
+    "cli"
+  ],
+  "author": "Alex Legarda",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/runsonmypc/cc-minimal-statusline/issues"
+  },
+  "homepage": "https://github.com/runsonmypc/cc-minimal-statusline#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
