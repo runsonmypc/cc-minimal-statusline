@@ -73,10 +73,34 @@ check_latest_version() {
 is_outdated=$(check_latest_version)
 
 # Check if autocompact is enabled (default: true)
-# Can be disabled via settings.json: "autoCompactEnabled": false
+# Checks both global (~/.claude/) and project-level (.claude/) settings
 autocompact_enabled="true"
-if grep -q '"autoCompactEnabled"[[:space:]]*:[[:space:]]*false' ~/.claude/settings.json 2>/dev/null; then
+check_autocompact_disabled() {
+    grep -q '"autoCompactEnabled"[[:space:]]*:[[:space:]]*false' "$1" 2>/dev/null
+}
+# Check global settings
+if check_autocompact_disabled ~/.claude/settings.json; then
     autocompact_enabled="false"
+fi
+# Check project settings (overrides global, most specific wins)
+if [ -n "$current_dir" ]; then
+    git_root=$(git -C "$current_dir" rev-parse --show-toplevel 2>/dev/null)
+    # Check git root first (project-level)
+    if [ -n "$git_root" ] && [ -f "$git_root/.claude/settings.json" ]; then
+        if check_autocompact_disabled "$git_root/.claude/settings.json"; then
+            autocompact_enabled="false"
+        elif grep -q '"autoCompactEnabled"[[:space:]]*:[[:space:]]*true' "$git_root/.claude/settings.json" 2>/dev/null; then
+            autocompact_enabled="true"
+        fi
+    fi
+    # Check current dir last (subdirectory can override project)
+    if [ -n "$git_root" ] && [ "$git_root" != "$current_dir" ] && [ -f "$current_dir/.claude/settings.json" ]; then
+        if check_autocompact_disabled "$current_dir/.claude/settings.json"; then
+            autocompact_enabled="false"
+        elif grep -q '"autoCompactEnabled"[[:space:]]*:[[:space:]]*true' "$current_dir/.claude/settings.json" 2>/dev/null; then
+            autocompact_enabled="true"
+        fi
+    fi
 fi
 
 # Adjust for autocompact buffer (22.5% reserved = 77.5% usable)
