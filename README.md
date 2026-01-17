@@ -2,7 +2,7 @@
 
 A minimal status line for [Claude Code](https://github.com/anthropics/claude-code).
 
-![Preview](https://raw.githubusercontent.com/runsonmypc/cc-minimal-statusline/main/preview.png)
+![Preview](preview.png)
 
 ## Features
 
