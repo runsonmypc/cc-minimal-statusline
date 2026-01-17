@@ -28,17 +28,7 @@ Then select "MesloLGM Nerd Font" in your terminal settings.
 npm install -g cc-minimal-statusline
 ```
 
-Add to `~/.claude/settings.json`:
-
-```json
-{
-  "statusLine": {
-    "type": "command",
-    "command": "cc-minimal-statusline",
-    "padding": 0
-  }
-}
-```
+That's it! The install automatically configures Claude Code. Restart Claude Code to see the new status line.
 
 ## Colors
 
