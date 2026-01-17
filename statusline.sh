@@ -284,7 +284,7 @@ build_status() {
 
     # Files and lines changed from git status (only show if there are uncommitted changes)
     if [ "$git_files" != "0" ] || [ "$git_added" != "0" ] || [ "$git_removed" != "0" ]; then
-        out="${out} ${sep} ${C_DIM}${ICON_FILES}${git_files}${C_RESET} ${C_GREEN}+${git_added}${C_DIM}/${C_RED}-${git_removed}${C_RESET}"
+        out="${out} ${sep} ${C_DIM}${ICON_FILES} ${git_files}${C_RESET} ${C_GREEN}+${git_added}${C_DIM}/${C_RED}-${git_removed}${C_RESET}"
     fi
 
     # Context percentage and bar (with compress icon if autocompact enabled)
