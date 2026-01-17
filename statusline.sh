@@ -128,7 +128,7 @@ ICON_BRANCH=$(printf '\xee\x9c\xa5')      # U+E725 git branch
 ICON_WORKTREE=$(printf '\xef\x83\x83')    # U+F0C3 flask
 ICON_FILES=$(printf '\xef\x85\x9b')       # U+F15B file
 ICON_UPDATE=$(printf '\xef\x81\xa2')      # U+F062 fa-arrow-up
-ICON_COMPACT=$(printf '\xef\x81\xa6')     # U+F066 fa-compress
+ICON_COMPACT=$(printf '\xf3\xb0\x98\x95') # U+F0615 md-arrow_collapse
 # Bar colors - 20-step gradient (every 5%)
 # Green (0%) → Gold (50%) → Model color #C15F3C (75%) → Red (100%)
 BAR_COLORS=(
