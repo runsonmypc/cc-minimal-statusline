@@ -1,6 +1,6 @@
 {
   "name": "cc-minimal-statusline",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A minimal, elegant status line for Claude Code with gradient progress bar, git integration, and update notifications",
   "main": "statusline.sh",
   "bin": {

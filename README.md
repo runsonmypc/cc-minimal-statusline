@@ -3,6 +3,7 @@
 A minimal status line for [Claude Code](https://github.com/anthropics/claude-code).
 
 ![Preview](preview.png)
+![Preview 2](preview2.png)
 
 ## Features
 
