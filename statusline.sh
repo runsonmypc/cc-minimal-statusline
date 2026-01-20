@@ -72,38 +72,14 @@ check_latest_version() {
 
 is_outdated=$(check_latest_version)
 
-# Check if autocompact is enabled (default: true at 95% threshold)
-# Disabled if CLAUDE_AUTOCOMPACT_PCT_OVERRIDE >= 100 in env settings
+# Check if autocompact is enabled (default: true)
+# Setting is "autoCompactEnabled" in ~/.claude.json
 autocompact_enabled="true"
-get_autocompact_threshold() {
-    # Extract CLAUDE_AUTOCOMPACT_PCT_OVERRIDE from env section of settings.json
-    grep -o '"CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"[[:space:]]*:[[:space:]]*"[^"]*"' "$1" 2>/dev/null | \
-        sed 's/.*"\([0-9]*\)".*/\1/' | head -1
-}
-# Check settings files (project overrides global)
-threshold=""
-# Global settings
-if [ -f ~/.claude/settings.json ]; then
-    val=$(get_autocompact_threshold ~/.claude/settings.json)
-    [ -n "$val" ] && threshold="$val"
-fi
-# Project settings
-if [ -n "$current_dir" ]; then
-    git_root=$(git -C "$current_dir" rev-parse --show-toplevel 2>/dev/null)
-    # Check git root if in a repo
-    if [ -n "$git_root" ] && [ -f "$git_root/.claude/settings.json" ]; then
-        val=$(get_autocompact_threshold "$git_root/.claude/settings.json")
-        [ -n "$val" ] && threshold="$val"
+if [ -f ~/.claude.json ]; then
+    # Check for "autoCompactEnabled": false (with flexible whitespace)
+    if grep -q '"autoCompactEnabled"[[:space:]]*:[[:space:]]*false' ~/.claude.json 2>/dev/null; then
+        autocompact_enabled="false"
     fi
-    # Check current_dir (if different from git root, or if not in a repo)
-    if [ -f "$current_dir/.claude/settings.json" ] && [ "$current_dir" != "$git_root" ]; then
-        val=$(get_autocompact_threshold "$current_dir/.claude/settings.json")
-        [ -n "$val" ] && threshold="$val"
-    fi
-fi
-# If threshold >= 100, autocompact is effectively disabled
-if [ -n "$threshold" ] && [ "$threshold" -ge 100 ] 2>/dev/null; then
-    autocompact_enabled="false"
 fi
 
 # Adjust for autocompact buffer (22.5% reserved = 77.5% usable)
