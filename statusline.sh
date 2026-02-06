@@ -18,7 +18,9 @@ get_number_value() {
 # Extract fields
 version=$(get_string_value "version")
 model=$(get_string_value "display_name")
+model_id=$(get_string_value "id")
 used_pct=$(get_number_value "used_percentage")
+context_window_size=$(get_number_value "context_window_size")
 lines_added=$(get_number_value "total_lines_added")
 lines_removed=$(get_number_value "total_lines_removed")
 current_dir=$(get_string_value "current_dir")
@@ -27,6 +29,7 @@ current_dir=$(get_string_value "current_dir")
 [ -z "$version" ] && version="?.?.?"
 [ -z "$model" ] && model="Claude"
 [ -z "$used_pct" ] && used_pct="0"
+[ -z "$context_window_size" ] && context_window_size="200000"
 [ -z "$lines_added" ] && lines_added="0"
 [ -z "$lines_removed" ] && lines_removed="0"
 [ -z "$current_dir" ] && current_dir="$PWD"
@@ -82,10 +85,22 @@ if [ -f ~/.claude.json ]; then
     fi
 fi
 
-# Adjust for autocompact buffer (22.5% reserved = 77.5% usable)
-# Only apply when autocompact is enabled
+# Adjust context percentage for autocompact buffer when enabled
+# Formula: available = context_window - max_output_tokens - 13000 (session memory buffer)
+# Scales used_pct so 100% = autocompact threshold (not full context window)
 if [ "$autocompact_enabled" = "true" ] && [ "$used_pct" -gt 0 ] 2>/dev/null; then
-    used_pct=$((used_pct * 100 / 77))
+    # Determine max_output_tokens: env override > model-specific default
+    max_output_tokens="${CLAUDE_CODE_MAX_OUTPUT_TOKENS:-}"
+    if [ -z "$max_output_tokens" ]; then
+        # Model-specific defaults (src/core/loop.ts)
+        case "$model_id" in
+            *opus-4-5*|*opus-4-6*|*sonnet-4*|*haiku-4*) max_output_tokens=64000 ;;
+            *) max_output_tokens=32000 ;;
+        esac
+    fi
+    usable_pct=$(( (context_window_size - max_output_tokens - 13000) * 100 / context_window_size ))
+    [ "$usable_pct" -le 0 ] && usable_pct=1
+    used_pct=$((used_pct * 100 / usable_pct))
     [ "$used_pct" -gt 100 ] && used_pct=100
 fi
 
