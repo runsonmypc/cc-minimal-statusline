@@ -125,27 +125,55 @@ BAR_COLORS=(
     '\033[38;2;220;60;60m'    # 95-100%: Red
 )
 
+# Truncate a single name to 15 chars max
+truncate_segment() {
+    local seg="$1"
+    local max=15
+    if [ ${#seg} -gt $max ]; then
+        echo "${seg:0:$max}…"
+    else
+        echo "$seg"
+    fi
+}
+
 # Smart directory truncation
 truncate_path() {
     local path="$1"
     # Remove home directory prefix
     path="${path/#$HOME/~}"
 
-    if [ ${#path} -le 20 ]; then
-        echo "$path"
-        return
-    fi
-
     # Split into segments
     IFS='/' read -ra segments <<< "$path"
     local count=${#segments[@]}
 
-    # For ~ paths, need at least 4 segments to truncate (~ + 3 dirs)
+    # Truncate each individual segment (skip ~ prefix)
+    for ((i=0; i<count; i++)); do
+        if [ "${segments[$i]}" != "~" ] && [ -n "${segments[$i]}" ]; then
+            segments[$i]=$(truncate_segment "${segments[$i]}")
+        fi
+    done
+
+    # Rebuild path with truncated segments
+    local rebuilt=""
+    for ((i=0; i<count; i++)); do
+        if [ $i -eq 0 ]; then
+            rebuilt="${segments[$i]}"
+        else
+            rebuilt="${rebuilt}/${segments[$i]}"
+        fi
+    done
+
+    if [ ${#rebuilt} -le 20 ]; then
+        echo "$rebuilt"
+        return
+    fi
+
+    # For ~ paths, need at least 4 segments to collapse middle (~ + 3 dirs)
     # For other paths, need at least 3 segments
     if [[ "$path" == ~* ]]; then
-        [ $count -le 4 ] && { echo "$path"; return; }
+        [ $count -le 4 ] && { echo "$rebuilt"; return; }
     else
-        [ $count -le 2 ] && { echo "$path"; return; }
+        [ $count -le 2 ] && { echo "$rebuilt"; return; }
     fi
 
     local last="${segments[$((count-1))]}"
@@ -214,7 +242,7 @@ get_git_info() {
 # Generate progress bar (returns literal escape sequences, not interpreted)
 generate_bar() {
     local pct=$1
-    local bar_len=30
+    local bar_len=25
     local filled=$((bar_len * pct / 100))
     [ $filled -gt $bar_len ] && filled=$bar_len
     local empty=$((bar_len - filled))
@@ -277,6 +305,7 @@ build_status() {
 
     # Branch (purple)
     if [ -n "$branch" ]; then
+        branch=$(truncate_segment "$branch")
         out="${out} ${C_PURPLE}${ICON_BRANCH}${branch}${C_RESET}"
     fi
 
