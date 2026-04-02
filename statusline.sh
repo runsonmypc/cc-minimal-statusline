@@ -18,7 +18,9 @@ get_number_value() {
 # Extract fields
 version=$(get_string_value "version")
 model=$(get_string_value "display_name")
-used_pct=$(get_number_value "used_percentage")
+# Extract context_window.used_percentage specifically (not rate_limits.*.used_percentage)
+# First extract the context_window block (with nested current_usage), then grab used_percentage from it
+used_pct=$(echo "$json" | grep -o '"context_window":{[^{]*{[^}]*}[^}]*}' | grep -o '"used_percentage":[0-9]*' | head -1 | grep -o '[0-9]*')
 lines_added=$(get_number_value "total_lines_added")
 lines_removed=$(get_number_value "total_lines_removed")
 current_dir=$(get_string_value "current_dir")
