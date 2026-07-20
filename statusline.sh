@@ -18,6 +18,9 @@ get_number_value() {
 # Extract fields
 version=$(get_string_value "version")
 model=$(get_string_value "display_name")
+# Effort level (nested: "effort":{"level":"high"}) - absent when the model
+# doesn't support the effort parameter, in which case it's simply not shown
+effort=$(echo "$json" | grep -o '"effort":{[^}]*}' | sed -n 's/.*"level":"\([^"]*\)".*/\1/p' | head -1)
 # Extract context_window.used_percentage specifically (not rate_limits.*.used_percentage)
 # First extract the context_window block (with nested current_usage), then grab used_percentage from it
 used_pct=$(echo "$json" | grep -o '"context_window":{[^{]*{[^}]*}[^}]*}' | grep -o '"used_percentage":[0-9]*' | head -1 | grep -o '[0-9]*')
@@ -95,6 +98,7 @@ C_CYAN='\033[38;5;80m'        # Cyan - worktree flask
 C_PURPLE='\033[38;5;141m'     # Purple - branch
 C_GREEN='\033[38;5;108m'      # Muted green - lines added
 C_RED='\033[38;5;167m'        # Muted red - lines removed
+C_EFFORT='\033[38;5;245m'     # Muted gray - effort level
 
 # Nerd Font icons (using printf for reliable UTF-8 output)
 ICON_BRANCH=$(printf '\xee\x9c\xa5')      # U+E725 git branch
@@ -267,9 +271,19 @@ generate_bar() {
     printf '%s' "$bar"
 }
 
+# Measure the visible (on-screen) width of a string by stripping the literal
+# \033[...m color sequences and counting the remaining characters. In a UTF-8
+# locale ${#s} counts code points, so box-drawing and Nerd Font mono glyphs
+# each count as one cell - which matches how the target font renders them.
+visible_width() {
+    local s
+    s=$(printf '%s' "$1" | sed -E 's/\\033\[[0-9;]*m//g')
+    printf '%s' "${#s}"
+}
+
 # Build the status line
 build_status() {
-    local sep="${C_DIM}│${C_RESET}"
+    local gap="  "   # spacing between segments (colors carry the separation)
     local path_display=$(truncate_path "$current_dir")
     local git_info=$(get_git_info "$current_dir")
     local bar=$(generate_bar "$used_pct")
@@ -291,38 +305,56 @@ build_status() {
         [ -z "$git_removed" ] && git_removed="0"
     fi
 
-    # Version (with update icon if outdated)
+    # --- Group 1: core (version + model + effort) - always stays on line 1 ---
     local version_display="v${version}"
     [ "$is_outdated" = "true" ] && version_display="${version_display} ${C_ORANGE}${ICON_UPDATE}"
-    local out="${C_DIM}${version_display}${C_RESET}"
+    local core="${C_DIM}${version_display}${C_RESET}${gap}${C_ORANGE}${model}${C_RESET}"
+    # Effort level to the right of the model, if the model supports it
+    [ -n "$effort" ] && core="${core} ${C_EFFORT}${effort}${C_RESET}"
 
-    # Model
-    out="${out} ${sep} ${C_ORANGE}${model}${C_RESET}"
-
-    # Directory (blue) - prepend cyan flask icon if in worktree
+    # --- Group 2: loc (directory + branch + changed files) ---
+    # Prepend cyan flask icon if in a worktree
     if [ -n "$worktree" ]; then
         path_display="${C_CYAN}${ICON_WORKTREE}${C_BLUE}${path_display}"
     fi
-    out="${out} ${sep} ${C_BLUE}${path_display}${C_RESET}"
-
-    # Branch (purple)
+    local loc="${C_BLUE}${path_display}${C_RESET}"
     if [ -n "$branch" ]; then
         branch=$(truncate_segment "$branch")
-        out="${out} ${C_PURPLE}${ICON_BRANCH}${branch}${C_RESET}"
+        loc="${loc} ${C_PURPLE}${ICON_BRANCH}${branch}${C_RESET}"
     fi
-
-    # Files and lines changed from git status (only show if there are uncommitted changes)
+    # Files and lines changed from git status (only if there are uncommitted changes)
     if [ "$git_files" != "0" ] || [ "$git_added" != "0" ] || [ "$git_removed" != "0" ]; then
-        out="${out} ${sep} ${C_DIM}${git_files}${ICON_FILES}${C_RESET} ${C_GREEN}+${git_added}${C_DIM}/${C_RED}-${git_removed}${C_RESET}"
+        loc="${loc}${gap}${C_DIM}${git_files}${ICON_FILES}${C_RESET} ${C_GREEN}+${git_added}${C_DIM}/${C_RED}-${git_removed}${C_RESET}"
     fi
 
-    # Context percentage and bar (with compress icon if autocompact enabled)
+    # --- Group 3: ctx (context percentage + bar + autocompact indicator) ---
     local compact_indicator=""
     [ "$autocompact_enabled" = "true" ] && compact_indicator=" ${C_DIM}${ICON_COMPACT}"
-    out="${out} ${sep} ${C_DIM}${used_pct}%${C_RESET} ${bar}${compact_indicator}${C_RESET}"
+    local ctx="${C_DIM}${used_pct}%${C_RESET} ${bar}${compact_indicator}${C_RESET}"
 
-    # Single echo -e at the end interprets ALL escape sequences
-    echo -e "$out"
+    # Progressively fold groups onto a second line as the terminal narrows.
+    # Claude Code sets $COLUMNS to the terminal width; when it's unset (older
+    # Claude Code) we keep the original single-line behavior. Priority:
+    #   wide    ->  core  loc  ctx          (everything on one line)
+    #   medium  ->  core  loc               (context bar drops to line 2)
+    #               ctx
+    #   narrow  ->  core                     (path + branch drop down too)
+    #               loc  ctx
+    local join="${gap}"
+    local cols="${COLUMNS:-0}"
+    case "$cols" in ''|*[!0-9]*) cols=0 ;; esac
+
+    # Single echo -e per line interprets ALL escape sequences
+    local line_all="${core}${join}${loc}${join}${ctx}"
+    if [ "$cols" -le 0 ] || [ "$(visible_width "$line_all")" -le "$cols" ]; then
+        echo -e "$line_all"
+    elif [ "$(visible_width "${core}${join}${loc}")" -le "$cols" ]; then
+        echo -e "${core}${join}${loc}"
+        echo -e "$ctx"
+    else
+        echo -e "$core"
+        echo -e "${loc}${join}${ctx}"
+    fi
 }
 
 # Output the status line

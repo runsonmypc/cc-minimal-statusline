@@ -7,11 +7,12 @@ A minimal status line for [Claude Code](https://github.com/anthropics/claude-cod
 ## Features
 
 - Version with update indicator (↑)
-- Model name
+- Model name + effort level (when the model supports it)
 - Smart path truncation (`~code/project/…/current`)
 - Git branch + worktree indicator
 - File & line changes (includes untracked files, unlike Claude Code's footer)
 - Context usage with gradient bar + autocompact indicator
+- Responsive: segments fold onto a second line as the terminal narrows
 
 ## Install
 
@@ -35,8 +36,9 @@ Edit these variables in the script:
 
 | Element | Variable | Default |
 |---------|----------|---------|
-| Version/separators | `C_DIM` | Gray (239) |
+| Version / dim text | `C_DIM` | Gray (239) |
 | Model | `C_ORANGE` | #E6714E |
+| Effort level | `C_EFFORT` | Gray (245) |
 | Directory | `C_BLUE` | Blue (75) |
 | Worktree | `C_CYAN` | Cyan (80) |
 | Branch | `C_PURPLE` | Purple (141) |

@@ -10,7 +10,8 @@ const settingsPath = path.join(configDir, 'settings.json');
 const statusLineConfig = {
   type: 'command',
   command: 'cc-minimal-statusline',
-  padding: 0
+  padding: 0,
+  refreshInterval: 2
 };
 
 // Create .claude directory if it doesn't exist
