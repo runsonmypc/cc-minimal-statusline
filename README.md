@@ -8,6 +8,9 @@ A minimal status line for [Claude Code](https://github.com/anthropics/claude-cod
 
 - Version with update indicator (↑)
 - Model name + effort level (when the model supports it)
+- Ultracode indicator — a violet `ultra` replaces `xhigh` while ultracode is on
+  - Claude Code reports ultracode as plain `xhigh` in the status line JSON, so this is read
+    from the session transcript. It updates as soon as you run `/effort ultracode`.
 - Smart path truncation (`~code/project/…/current`)
 - Git branch + worktree indicator
 - File & line changes (includes untracked files, unlike Claude Code's footer)
@@ -39,6 +42,7 @@ Edit these variables in the script:
 | Version / dim text | `C_DIM` | Gray (239) |
 | Model | `C_ORANGE` | #E6714E |
 | Effort level | `C_EFFORT` | Gray (245) |
+| Ultracode | `C_ULTRA` | rgb(175,135,255) |
 | Directory | `C_BLUE` | Blue (75) |
 | Worktree | `C_CYAN` | Cyan (80) |
 | Branch | `C_PURPLE` | Purple (141) |

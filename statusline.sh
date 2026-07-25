@@ -27,6 +27,8 @@ used_pct=$(echo "$json" | grep -o '"context_window":{[^{]*{[^}]*}[^}]*}' | grep 
 lines_added=$(get_number_value "total_lines_added")
 lines_removed=$(get_number_value "total_lines_removed")
 current_dir=$(get_string_value "current_dir")
+session_id=$(get_string_value "session_id")
+transcript_path=$(get_string_value "transcript_path")
 
 # Fallback values
 [ -z "$version" ] && version="?.?.?"
@@ -87,6 +89,85 @@ if [ -f ~/.claude.json ]; then
     fi
 fi
 
+# Detect ultracode (xhigh effort plus standing workflow orchestration).
+# Claude Code reports it as plain "xhigh" in the status line JSON, so read the
+# session transcript instead. Two signals, most recent one wins:
+#   1. /effort's own output, written the moment you toggle:
+#      "content":"<local-command-stdout>Set effort level to ultracode ...
+#   2. the reminder attachments, written on the first prompt after a toggle:
+#      "attachment":{"type":"ultra_effort_enter"|"ultra_effort_exit"...
+# Signal 1 keeps the indicator in sync immediately; signal 2 is authoritative
+# and also covers ultracode enabled at launch via --settings. Both anchors
+# include a leading unescaped quote, so the same text quoted inside a tool
+# result (where JSON escapes it) can't trigger a false positive.
+ULTRA_SIGNALS='"attachment":\{"type":"ultra_effort_(enter|exit)"|"content":"<local-command-stdout>(Set effort level to [a-z]+|Effort level set to auto)'
+ultracode="false"
+ultra_cache="/tmp/.claude-ultracode-${session_id:-$(basename "${transcript_path:-unknown}" .jsonl)}"
+
+reverse_cat() {
+    if command -v tac >/dev/null 2>&1; then
+        tac "$1"
+    else
+        tail -r "$1"
+    fi
+}
+
+# "true" if the matched signal means ultracode is on
+classify_signal() {
+    case "$1" in
+        *ultra_effort_enter*) echo "true" ;;
+        *"Set effort level to ultracode"*) echo "true" ;;
+        *) echo "false" ;;
+    esac
+}
+
+detect_ultracode() {
+    # Ultracode always resolves to xhigh, so any other effort skips the scan
+    [ "$effort" = "xhigh" ] || return
+    [ -n "$transcript_path" ] && [ -f "$transcript_path" ] || return
+
+    local size=$(wc -c < "$transcript_path" 2>/dev/null | tr -d ' ')
+    [ -z "$size" ] && return
+
+    local cached_size=0
+    local cached_state="false"
+    if [ -f "$ultra_cache" ]; then
+        cached_size=$(head -1 "$ultra_cache" 2>/dev/null)
+        cached_state=$(tail -1 "$ultra_cache" 2>/dev/null)
+        case "$cached_size" in ''|*[!0-9]*) cached_size=0 ;; esac
+        [ "$cached_state" = "true" ] || cached_state="false"
+    fi
+
+    local signal=""
+    local state="$cached_state"
+    if [ "$cached_size" -eq "$size" ]; then
+        # Transcript untouched since the last check - reuse the verdict
+        echo "$cached_state"
+        return
+    elif [ "$cached_size" -gt 0 ] && [ "$cached_size" -lt "$size" ]; then
+        # Scan only what was appended. Rewind 4KB so an entry that was
+        # half-written at the last check isn't missed.
+        local from=$((cached_size - 4096))
+        [ $from -lt 0 ] && from=0
+        signal=$(tail -c "+$((from + 1))" "$transcript_path" 2>/dev/null \
+                 | grep -oE "$ULTRA_SIGNALS" | tail -1)
+    else
+        # First run, or the transcript shrank - walk back from the end and stop
+        # at the newest signal
+        signal=$(reverse_cat "$transcript_path" 2>/dev/null \
+                 | grep -m1 -oE "$ULTRA_SIGNALS")
+        state="false"
+    fi
+
+    [ -n "$signal" ] && state=$(classify_signal "$signal")
+
+    printf '%s\n%s\n' "$size" "$state" > "$ultra_cache" 2>/dev/null
+    echo "$state"
+}
+
+ultracode=$(detect_ultracode)
+[ "$ultracode" = "true" ] || ultracode="false"
+
 # Show raw used_percentage from Claude Code as-is
 
 # ANSI 256 color codes (as literal strings - interpreted only at final echo -e)
@@ -99,6 +180,7 @@ C_PURPLE='\033[38;5;141m'     # Purple - branch
 C_GREEN='\033[38;5;108m'      # Muted green - lines added
 C_RED='\033[38;5;167m'        # Muted red - lines removed
 C_EFFORT='\033[38;5;245m'     # Muted gray - effort level
+C_ULTRA='\033[38;2;175;135;255m'  # rgb(175,135,255) - Claude Code's ultracode violet
 
 # Nerd Font icons (using printf for reliable UTF-8 output)
 ICON_BRANCH=$(printf '\xee\x9c\xa5')      # U+E725 git branch
@@ -309,8 +391,13 @@ build_status() {
     local version_display="v${version}"
     [ "$is_outdated" = "true" ] && version_display="${version_display} ${C_ORANGE}${ICON_UPDATE}"
     local core="${C_DIM}${version_display}${C_RESET}${gap}${C_ORANGE}${model}${C_RESET}"
-    # Effort level to the right of the model, if the model supports it
-    [ -n "$effort" ] && core="${core} ${C_EFFORT}${effort}${C_RESET}"
+    # Effort level to the right of the model, if the model supports it.
+    # Ultracode reports as "xhigh", so it gets its own label and violet accent.
+    if [ "$ultracode" = "true" ]; then
+        core="${core} ${C_ULTRA}ultra${C_RESET}"
+    elif [ -n "$effort" ]; then
+        core="${core} ${C_EFFORT}${effort}${C_RESET}"
+    fi
 
     # --- Group 2: loc (directory + branch + changed files) ---
     # Prepend cyan flask icon if in a worktree
