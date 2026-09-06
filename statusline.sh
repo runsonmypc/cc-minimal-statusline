@@ -22,8 +22,11 @@ model=$(get_string_value "display_name")
 # doesn't support the effort parameter, in which case it's simply not shown
 effort=$(echo "$json" | grep -o '"effort":{[^}]*}' | sed -n 's/.*"level":"\([^"]*\)".*/\1/p' | head -1)
 # Extract context_window.used_percentage specifically (not rate_limits.*.used_percentage)
-# First extract the context_window block (with nested current_usage), then grab used_percentage from it
-used_pct=$(echo "$json" | grep -o '"context_window":{[^{]*{[^}]*}[^}]*}' | grep -o '"used_percentage":[0-9]*' | head -1 | grep -o '[0-9]*')
+# First extract the context_window block (with nested current_usage), then grab fields from it
+cw_block=$(echo "$json" | grep -o '"context_window":{[^{]*{[^}]*}[^}]*}')
+used_pct=$(echo "$cw_block" | grep -o '"used_percentage":[0-9]*' | head -1 | grep -o '[0-9]*')
+total_tokens=$(echo "$cw_block" | grep -o '"total_input_tokens":[0-9]*' | head -1 | grep -o '[0-9]*')
+context_window_size=$(echo "$cw_block" | grep -o '"context_window_size":[0-9]*' | head -1 | grep -o '[0-9]*')
 lines_added=$(get_number_value "total_lines_added")
 lines_removed=$(get_number_value "total_lines_removed")
 current_dir=$(get_string_value "current_dir")
@@ -34,6 +37,8 @@ transcript_path=$(get_string_value "transcript_path")
 [ -z "$version" ] && version="?.?.?"
 [ -z "$model" ] && model="Claude"
 [ -z "$used_pct" ] && used_pct="0"
+[ -z "$total_tokens" ] && total_tokens="0"
+[ -z "$context_window_size" ] && context_window_size="200000"
 [ -z "$lines_added" ] && lines_added="0"
 [ -z "$lines_removed" ] && lines_removed="0"
 [ -z "$current_dir" ] && current_dir="$PWD"
@@ -353,6 +358,21 @@ generate_bar() {
     printf '%s' "$bar"
 }
 
+# Format a token count as "188k" / "1.5m" / "1m" (whole millions drop the decimal)
+format_tokens() {
+    awk -v n="$1" 'BEGIN{
+        if (n >= 1000000) {
+            v = n / 1000000
+            if (v == int(v)) printf "%dm", v
+            else printf "%.1fm", v
+        } else if (n >= 1000) {
+            printf "%.0fk", n / 1000
+        } else {
+            printf "%d", n
+        }
+    }'
+}
+
 # Measure the visible (on-screen) width of a string by stripping the literal
 # \033[...m color sequences and counting the remaining characters. In a UTF-8
 # locale ${#s} counts code points, so box-drawing and Nerd Font mono glyphs
@@ -417,7 +437,8 @@ build_status() {
     # --- Group 3: ctx (context percentage + bar + autocompact indicator) ---
     local compact_indicator=""
     [ "$autocompact_enabled" = "true" ] && compact_indicator=" ${C_DIM}${ICON_COMPACT}"
-    local ctx="${C_DIM}${used_pct}%${C_RESET} ${bar}${compact_indicator}${C_RESET}"
+    local token_display="$(format_tokens "$total_tokens")/$(format_tokens "$context_window_size")"
+    local ctx="${C_DIM}${used_pct}%${C_RESET} ${bar}${compact_indicator} ${C_DIM}${token_display}${C_RESET}"
 
     # Progressively fold groups onto a second line as the terminal narrows.
     # Claude Code sets $COLUMNS to the terminal width; when it's unset (older

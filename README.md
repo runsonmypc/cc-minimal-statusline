@@ -14,7 +14,7 @@ A minimal status line for [Claude Code](https://github.com/anthropics/claude-cod
 - Smart path truncation (`~code/project/…/current`)
 - Git branch + worktree indicator
 - File & line changes (includes untracked files, unlike Claude Code's footer)
-- Context usage with gradient bar + autocompact indicator
+- Context usage with gradient bar, token count (`188k/1m`), and autocompact indicator
 - Responsive: segments fold onto a second line as the terminal narrows
 
 ## Install
