@@ -43,62 +43,20 @@ transcript_path=$(get_string_value "transcript_path")
 [ -z "$lines_removed" ] && lines_removed="0"
 [ -z "$current_dir" ] && current_dir="$PWD"
 
-# Check if we're on latest version (cached, background refresh with atomic lock)
+# Check if we're on latest version (read-only from cache populated by background runner)
 is_outdated="false"
 cache_file="/tmp/.claude-code-latest-version"
-cache_max_age=3600  # 1 hour
 
 check_latest_version() {
-    local now=$(date +%s)
     local cached_version=""
-    local cached_time=0
-    local lock_dir="/tmp/.claude-code-version.lock"
 
-    # Read cache if it exists (line 1: timestamp, line 2: version)
+    # Read cached version (line 2 if timestamped format, else line 1)
     if [ -f "$cache_file" ]; then
-        cached_time=$(sed -n '1p' "$cache_file" 2>/dev/null)
         cached_version=$(sed -n '2p' "$cache_file" 2>/dev/null)
-        case "$cached_time" in ''|*[!0-9]*) cached_time=0 ;; esac
+        [ -z "$cached_version" ] && cached_version=$(sed -n '1p' "$cache_file" 2>/dev/null)
     fi
 
-    # Clean up stale lock if older than 60 seconds
-    if [ -d "$lock_dir" ]; then
-        local lock_age=$(( now - $(stat -f %m "$lock_dir" 2>/dev/null || stat -c %Y "$lock_dir" 2>/dev/null || echo "$now") ))
-        if [ $lock_age -gt 60 ]; then
-            rmdir "$lock_dir" 2>/dev/null
-        fi
-    fi
-
-    # Determine refresh threshold (1 hour if known, 5 minutes if check failed or initial)
-    local max_age=$cache_max_age
-    [ -z "$cached_version" ] && max_age=300
-
-    # If cache is stale and no fetch currently in progress, trigger background refresh
-    if [ $((now - cached_time)) -gt $max_age ]; then
-        if mkdir "$lock_dir" 2>/dev/null; then
-            # Immediately record check time to prevent thundering herd / fork bombs
-            echo "$now" > "$cache_file"
-            [ -n "$cached_version" ] && echo "$cached_version" >> "$cache_file"
-
-            (
-                trap 'rmdir "$lock_dir" 2>/dev/null' EXIT
-                latest=""
-                if command -v curl &>/dev/null; then
-                    latest=$(curl -s --max-time 3 https://registry.npmjs.org/@anthropic-ai/claude-code/latest 2>/dev/null | grep -o '"version":"[^"]*"' | head -1 | cut -d'"' -f4)
-                fi
-                if [ -z "$latest" ] && command -v npm &>/dev/null; then
-                    latest=$(npm show @anthropic-ai/claude-code version 2>/dev/null | head -1)
-                fi
-
-                if [ -n "$latest" ]; then
-                    echo "$(date +%s)" > "$cache_file"
-                    echo "$latest" >> "$cache_file"
-                fi
-            ) &>/dev/null &
-        fi
-    fi
-
-    # Compare using cached version (may be stale, that's ok)
+    # Compare version with cached latest
     if [ -n "$cached_version" ] && [ "$version" != "$cached_version" ]; then
         # Check if current < latest
         if [ "$(printf '%s\n' "$version" "$cached_version" | sort -V | head -1)" = "$version" ] && [ "$version" != "$cached_version" ]; then
